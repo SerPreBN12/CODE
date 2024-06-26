@@ -1,0 +1,50 @@
+#!/bin/bash(можно было и не писать)
+
+#Проверка прав суперпользователя.
+
+[[ $EUID -ne 0 ]] && echo "Скрипт должен быть запущен с правами суперпользователя." && exit 1
+
+#Проверка аргументов.
+
+[[ $# -lt 1 ]] && echo "Использование: $0 NEW_IP [SUBNET_MASK] [GATEWAY]" && exit 1
+
+#Аргументы и значения.
+
+NEW_IP=$1
+SUBNET_MASK=${2:-255.255.255.0}
+GATEWAY=${3:-192.168.1.1}
+INTERFACE="eth0"
+CONFIG_FILE="/etc/network/interfaces"
+BACKUP_FILE="${CONFIG_FILE}.bak"
+
+#Копия(резерв).
+
+cp $CONFIG_FILE $BACKUP_FILE || { echo "Не удалось создать резервную копию $CONFIG_FILE"; exit 1; }
+
+# Замена параметров
+sed -i "s/\(address \).*/\1$NEW_IP/" $CONFIG_FILE
+sed -i "s/\(netmask \).*/\1$SUBNET_MASK/" $CONFIG_FILE
+sed -i "s/\(gateway \).*/\1$GATEWAY/" $CONFIG_FILE
+
+#Перезапуск.
+systemctl restart networking || { echo "Не удалось перезапустить сеть. Восстановление конфигурации..."; cp $BACKUP_FILE $CONFIG_FILE; systemctl restart networking; exit 1; }
+
+#Вывод сетевой конфиг.
+echo "Текущая сетевая конфигурация для $INTERFACE:"
+ip -4 addr show $INTERFACE
+echo "Маршруты:"
+ip route
+
+#Сообщение об успешном завершении.(YUPPIE)
+echo "Конфигурация сети успешно изменена."
+
+#Логирование/
+LOG_FILE="/var/log/network_setup.log"
+{
+    echo "[$(date)] Сетевая конфигурация изменена:"
+    echo "IP-адрес: $NEW_IP"
+    echo "Маска подсети: $SUBNET_MASK"
+    echo "Шлюз: $GATEWAY"
+    echo "-------------------------"
+} >> $LOG_FILE
+#ВСЁ.НИЧЕГОБОЛЬШЕИНТЕРЕСНОГО
